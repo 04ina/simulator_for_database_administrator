@@ -25,27 +25,40 @@ DECLARE
     QueryViweSolution text;
     QueryViweAnswer text;
     QuerySolution text;
+    EqualityCondition text;
+    QueryEqualityTest text;
+    ResultEqualityTest int; 
 BEGIN 
     EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
-    EXECUTE 'CREATE VIEW SolutionView AS ' || QuerySolution;
-    EXECUTE 'CREATE VIEW AnswerView AS ' || QueryAnswer;
+    EXECUTE 'CREATE TABLE SolutionView AS ' || QuerySolution;
+    EXECUTE 'CREATE TABLE AnswerView AS ' || QueryAnswer;
  
-    SELECT COUNT(*)
-    FROM SolutionView 
-    WHERE NOT EXISTS 
-    (
-        SELECT *
-        FROM table2
-        WHERE table1.column_name = table2.column_name
-    )
-    UNION ALL
-    SELECT COUNT(*)
-    FROM table2
-    WHERE NOT EXISTS 
-    (
-        SELECT *
-        FROM table1
-        WHERE table2.column_name = table1.column_name
-    );
+    SELECT string_agg('a.' || column_name || ' = ' || 's.' || column_name, ' AND ' ) INTO EqualityCondition
+    FROM information_schema.columns
+    WHERE table_name = tablee
+    AND column_default IS NULL;
+    RETURN EqualityCondition;
+
+    EqualityTest = 
+    '
+        SELECT COUNT(*)
+        FROM SolutionView s 
+        WHERE NOT EXISTS 
+        (
+            SELECT *
+            FROM AnswerView a
+            WHERE $1
+        )
+        UNION ALL
+        SELECT COUNT(*)
+        FROM AnswerView a 
+        WHERE NOT EXISTS 
+        (
+            SELECT *
+            FROM SolutionView s
+            WHERE $1
+        );
+    ';
+    EXECUTE QueryEqualityTest USING EqualityCondition;
 End;
 $$ LANGUAGE plpgsql
