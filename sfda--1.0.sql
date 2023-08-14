@@ -45,17 +45,35 @@ DECLARE
     QueryEqualityTest text;
     ResultEqualityTest int; 
     NumberCorrectlyRows int;
+    numberExpectedRows int; 
+    column_list1 TEXT;
+    column_list2 TEXT;
 BEGIN 
     EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
     RAISE NOTICE 'aboba %', QuerySolution;
     DROP TABLE IF EXISTS SolutionView;
     DROP TABLE IF EXISTS AnswerView;
-    EXECUTE 'CREATE TABLE SolutionView AS ' || QuerySolution;
-    EXECUTE 'CREATE TABLE AnswerView AS ' || QueryAnswer;
+    EXECUTE 'CREATE TABLE solutionview AS ' || QuerySolution;
+    EXECUTE 'CREATE TABLE answerview AS ' || QueryAnswer;
  
+    SELECT string_agg(column_name, ',') INTO column_list1
+    FROM information_schema.columns
+    WHERE table_name = 'solutionview'
+    AND column_default IS NULL;
+  
+    SELECT string_agg(column_name, ',') INTO column_list2
+    FROM information_schema.columns
+    WHERE table_name = 'answerview'
+    AND column_default IS NULL;
+
+    IF NOT (column_list1 = column_list2) THEN 
+        RAISE EXCEPTION 'Response contains different columns or a different column order';
+        RETURN NULL;
+    END IF;
+
     SELECT string_agg('a.' || column_name || ' = ' || 's.' || column_name, ' AND ' ) INTO EqualityCondition
     FROM information_schema.columns
-    WHERE table_name = 'SolutionView'
+    WHERE table_name = 'solutionview'
     AND column_default IS NULL;
     --RETURN EqualityCondition;
 
@@ -65,9 +83,19 @@ BEGIN
     
     --(SELECT count(*) FROM SolutionView) = SELECT COUNT(*) FROM 
     --Кол-во правильных записей
-    QueryEqualityTest = 'SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE )';
-    RAISE NOTICE 'aaaa %', QueryEqualityTest;    
+    QueryEqualityTest = 'SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE ' || EqualityCondition || ')';
+    --RAISE NOTICE 'test %', EqualityCondition;         
+    --QueryEqualityTest = format('SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE %I)',EqualityCondition);
+    --RAISE NOTICE 'aaaa %', QueryEqualityTest;    
     EXECUTE QueryEqualityTest INTO NumberCorrectlyRows;
+
+    EXECUTE 'SELECT COUNT(*) FROM solutionview;' INTO NumberExpectedRows;
+    
+    IF NOT (NumberExpectedRows = NumberCorrectlyRows) THEN
+        RAISE EXCEPTION 'The answer is wrong';
+        RETURN NULL;
+    END IF;
+    
     /* 
     QueryEqualityTest = 
     '
@@ -95,6 +123,6 @@ BEGIN
     DROP TABLE answerview;
 
     RAISE NOTICE 'aaaa %', NumberCorrectlyRows;
-RETURNS NumberCorrectlyRows;
+RETURN NumberCorrectlyRows;
 End;
 $$ LANGUAGE plpgsql
