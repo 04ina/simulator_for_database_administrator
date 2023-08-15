@@ -24,18 +24,19 @@ $$;
 
 CREATE TABLE tasks (
     name text,
-    description text,
+    nescription text,
     solution text,
-    RunTime time
+    exetime time,
+    decided BOOLEAN
 );
 
-CREATE FUNCTION AddTask(name text, description text, solution text, RunTime time)
+CREATE FUNCTION AddTask(name text, description text, solution text, exetime time)
 RETURNS void AS $$
-    INSERT INTO tasks VALUES (name,description,solution,RunTime);
+    INSERT INTO tasks VALUES (name,description,solution,exetime);
 $$ LANGUAGE SQL;
 
 CREATE FUNCTION SendAnswer(NameTask text, QueryAnswer text)
-RETURNS int
+RETURNS text 
 AS $$
 DECLARE
     QueryViweSolution text;
@@ -46,83 +47,89 @@ DECLARE
     ResultEqualityTest int; 
     NumberCorrectlyRows int;
     numberExpectedRows int; 
-    column_list1 TEXT;
-    column_list2 TEXT;
+    SolColumns TEXT;
+    AnsColumns TEXT;
+    StartTime timestamp;
+    EndTime timestamp;
+    ExeTime interval;
+    test TEXT; 
 BEGIN 
+    -- Creating tables with solution and answer
+    StartTime := clock_timestamp(); 
+
     EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
-    RAISE NOTICE 'aboba %', QuerySolution;
-    DROP TABLE IF EXISTS SolutionView;
-    DROP TABLE IF EXISTS AnswerView;
-    EXECUTE 'CREATE TABLE solutionview AS ' || QuerySolution;
-    EXECUTE 'CREATE TABLE answerview AS ' || QueryAnswer;
+    --EXECUTE 'SELECT exetime FROM tasks WHERE name = $1' USING NameTask INTO ExeTime; 
+    EXECUTE 'CREATE TABLE solution AS ' || QuerySolution;
+    EXECUTE 'CREATE TABLE answer AS ' || QueryAnswer;
  
-    SELECT string_agg(column_name, ',') INTO column_list1
+    -- Creating strings with answer and solution columns
+    SELECT string_agg(column_name, ',') INTO SolColumns
     FROM information_schema.columns
     WHERE table_name = 'solutionview'
     AND column_default IS NULL;
-  
-    SELECT string_agg(column_name, ',') INTO column_list2
+
+    SELECT string_agg(column_name, ',') INTO AnsColumns
     FROM information_schema.columns
     WHERE table_name = 'answerview'
     AND column_default IS NULL;
 
-    IF NOT (column_list1 = column_list2) THEN 
-        RAISE EXCEPTION 'Response contains different columns or a different column order';
-        RETURN NULL;
+    IF NOT (SolColumns = AnsColumns) THEN 
+        DROP TABLE solution;
+        DROP TABLE answer;
+        RETURN 'Response contains different columns or a different column order';
     END IF;
 
+    -- Creating string with equality conditions
     SELECT string_agg('a.' || column_name || ' = ' || 's.' || column_name, ' AND ' ) INTO EqualityCondition
     FROM information_schema.columns
-    WHERE table_name = 'solutionview'
+    WHERE table_name = 'solution'
     AND column_default IS NULL;
-    --RETURN EqualityCondition;
 
-    -- Кол-во всех записей
-
-    --SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE a.aircraft_code=s.aircraft_code AND a.model=s.model AND a.range=s.range);
-    
-    --(SELECT count(*) FROM SolutionView) = SELECT COUNT(*) FROM 
-    --Кол-во правильных записей
-    QueryEqualityTest = 'SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE ' || EqualityCondition || ')';
-    --RAISE NOTICE 'test %', EqualityCondition;         
-    --QueryEqualityTest = format('SELECT COUNT(*) FROM SolutionView s WHERE EXISTS (SELECT * FROM AnswerView a WHERE %I)',EqualityCondition);
-    --RAISE NOTICE 'aaaa %', QueryEqualityTest;    
+    -- Getting correct and expected rows
+    QueryEqualityTest = 'SELECT COUNT(*) FROM Solution s WHERE EXISTS (SELECT * FROM Answer a WHERE ' || EqualityCondition || ')';
     EXECUTE QueryEqualityTest INTO NumberCorrectlyRows;
-
-    EXECUTE 'SELECT COUNT(*) FROM solutionview;' INTO NumberExpectedRows;
-    
+    EXECUTE 'SELECT COUNT(*) FROM solution;' INTO NumberExpectedRows;
+   
+    -- Checking for correct answer
     IF NOT (NumberExpectedRows = NumberCorrectlyRows) THEN
-        RAISE EXCEPTION 'The answer is wrong';
-        RETURN NULL;
+        DROP TABLE solution;
+        DROP TABLE answer;
+        RETURN 'The answer is wrong';
     END IF;
-    
-    /* 
-    QueryEqualityTest = 
-    '
-        CREATE TABLE 
-        SELECT COUNT(*)
-        FROM SolutionView s 
-        WHERE NOT EXISTS 
-        (
-            SELECT *
-            FROM AnswerView a
-            WHERE $1
-        )
-        UNION   
-        SELECT COUNT(*)
-        FROM AnswerView a 
-        WHERE NOT EXISTS 
-        (
-            SELECT *
-            FROM SolutionView s
-            WHERE $1
-        );
-    ';
-    */
-    DROP TABLE solutionview;
-    DROP TABLE answerview;
 
-    RAISE NOTICE 'aaaa %', NumberCorrectlyRows;
-RETURN NumberCorrectlyRows;
+    DROP TABLE solution;
+    DROP TABLE answer;
+
+    EXECUTE QueryAnswer;
+
+    EndTime := clock_timestamp(); 
+
+    ExeTime := EndTime - StartTime;
+    
+    EXECUTE 'SELECT $1::timestamp - $2::timestamp' USING EndTime, StartTime INTO test;
+    
+    RAISE NOTICE 'aboab %', ExeTime; 
+    RETURN 'Request takes too long ' || ExeTime;
+
+    IF (EndTime-StartTime<=ExeTime) THEN
+    END IF;
+
+
+RETURN 'The problem is solved correctly';
 End;
 $$ LANGUAGE plpgsql
+/*
+CREATE FUNCTION delSolAnsTable()
+RETURN void
+PRIVATE
+$$
+START
+    
+END;
+$$ LANGUAGE plpgsql;
+*/
+
+
+
+
+
