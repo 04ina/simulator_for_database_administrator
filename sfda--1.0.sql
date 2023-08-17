@@ -3,9 +3,6 @@
 
 DO
 $$
-DECLARE
-    student_exists BOOLEAN;
-    teacher_exists BOOLEAN;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'student') THEN
         CREATE ROLE student LOGIN;    
@@ -14,25 +11,32 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'teacher') THEN
         CREATE ROLE teacher LOGIN;    
     END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sfda_privileged_role') THEN
+        CREATE ROLE sfda_privileged_role;
+    END IF;
 END;
 $$;
 
 
---\i /home/o4ina/postgres/TasksForDBA/demo-small-20170815.sql
 
---\c - teacher
+--\i /home/o4ina/postgres/TasksForDBA/demo-small-20170815.sql
 
 CREATE TABLE tasks (
     name text,
     nescription text,
     solution text,
-    exetime time,
+    maxexetime interval,
     decided BOOLEAN
 );
-
-CREATE FUNCTION AddTask(name text, description text, solution text, exetime time)
+/*
+GRANT SELECT ON tasks TO sfda_privileged_role;
+REVOKE ALL PRIVILEGES ON tasks TO public;
+GRANT SET ROLE TO student;
+*/
+CREATE FUNCTION AddTask(name text, description text, solution text, maxexetime interval DEFAULT '2 sec')
 RETURNS void AS $$
-    INSERT INTO tasks VALUES (name,description,solution,exetime);
+    INSERT INTO tasks VALUES (name,description,solution,maxexetime);
 $$ LANGUAGE SQL;
 
 CREATE FUNCTION SendAnswer(NameTask text, QueryAnswer text)
@@ -52,13 +56,14 @@ DECLARE
     StartTime timestamp;
     EndTime timestamp;
     ExeTime interval;
+    MaxExeTime interval;
     test TEXT; 
 BEGIN 
+    SET LOCAL ROLE sfda_privileged_role;
     -- Creating tables with solution and answer
-    StartTime := clock_timestamp(); 
 
     EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
-    --EXECUTE 'SELECT exetime FROM tasks WHERE name = $1' USING NameTask INTO ExeTime; 
+    EXECUTE 'SELECT maxexetime FROM tasks WHERE name = $1' USING NameTask INTO MaxExeTime; 
     EXECUTE 'CREATE TABLE solution AS ' || QuerySolution;
     EXECUTE 'CREATE TABLE answer AS ' || QueryAnswer;
  
@@ -100,36 +105,26 @@ BEGIN
     DROP TABLE solution;
     DROP TABLE answer;
 
+    StartTime := clock_timestamp(); 
     EXECUTE QueryAnswer;
-
     EndTime := clock_timestamp(); 
-
     ExeTime := EndTime - StartTime;
     
     EXECUTE 'SELECT $1::timestamp - $2::timestamp' USING EndTime, StartTime INTO test;
     
     RAISE NOTICE 'aboab %', ExeTime; 
-    RETURN 'Request takes too long ' || ExeTime;
 
-    IF (EndTime-StartTime<=ExeTime) THEN
+    IF (ExeTime>MaxExeTime) THEN
+        DROP TABLE solution;
+        DROP TABLE answer;
+        RETURN 'Request takes too long ' || ExeTime;
     END IF;
 
 
-RETURN 'The problem is solved correctly';
+RETURN 'The problem is solved correctly. time: ' || extract(sec from ExeTime) || ' seconds.';
 End;
 $$ LANGUAGE plpgsql
-/*
-CREATE FUNCTION delSolAnsTable()
-RETURN void
-PRIVATE
-$$
-START
-    
-END;
-$$ LANGUAGE plpgsql;
-*/
 
-
-
+--GRANT EXECUTE ON FUNCTION sendanswer TO public;
 
 
