@@ -12,9 +12,11 @@ BEGIN
         CREATE ROLE teacher LOGIN;    
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sfda_privileged_role') THEN
-        CREATE ROLE sfda_privileged_role;
-    END IF;
+    GRANT USAGE ON SCHEMA bookings TO student;
+    GRANT USAGE ON SCHEMA bookings TO teacher;
+
+    GRANT SELECT ON ALL tABLES IN SCHEMA bookings TO student;
+    GRANT SELECT ON ALL tABLES IN SCHEMA bookings TO teacher;
 END;
 $$;
 
@@ -40,7 +42,8 @@ RETURNS void AS $$
 $$ LANGUAGE SQL;
 
 CREATE FUNCTION SendAnswer(NameTask text, QueryAnswer text)
-RETURNS text 
+RETURNS text  
+SECURITY DEFINER
 AS $$
 DECLARE
     QueryViweSolution text;
@@ -59,7 +62,7 @@ DECLARE
     MaxExeTime interval;
     test TEXT; 
 BEGIN 
-    SET LOCAL ROLE sfda_privileged_role;
+    --SET LOCAL ROLE sfda_privileged_role;
     -- Creating tables with solution and answer
 
     EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
@@ -123,8 +126,17 @@ BEGIN
 
 RETURN 'The problem is solved correctly. time: ' || extract(sec from ExeTime) || ' seconds.';
 End;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
---GRANT EXECUTE ON FUNCTION sendanswer TO public;
+
+
+DO
+$$
+BEGIN
+    GRANT EXECUTE ON FUNCTION sendanswer TO public;
+    REVOKE ALL PRIVILEGES ON tasks FROM student;
+    GRANT ALL PRIVILEGES ON tasks TO teacher;
+END;
+$$;
 
 
