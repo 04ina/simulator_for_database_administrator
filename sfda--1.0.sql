@@ -53,6 +53,30 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE FUNCTION equalitycheck()
+RETURNS void AS $$
+DECLARE 
+    AnsCursor CURSOR FOR SELECT * FROM answer;
+    SolCursor CURSOR FOR SELECT * FROM solution;
+    val RECORD;
+BEGIN
+    OPEN AnsCursor;
+    OPEN SolCursor;
+    FETCH NEXT FROM AnsCursor INTO val;
+    RAISE NOTICE 'val % val %', val.range, val.model; 
+
+    WHILE FOUND LOOP
+        RAISE NOTICE 'val % val %', val.range, val.model; 
+        FETCH NEXT FROM AnsCursor INTO val;
+    END LOOP;
+
+
+
+    CLOSE AnsCursor;
+    CLOSE SolCursor;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE FUNCTION AddTask(name text, description text, solution text, maxexetime interval DEFAULT '2 sec')
 RETURNS void AS $$
     INSERT INTO tasks VALUES (name,description,solution,maxexetime,'False');
@@ -78,6 +102,7 @@ DECLARE
     ExeTime interval;
     MaxExeTime interval;
     test TEXT; 
+    aaa CURSOR FOR SELECT * FROM aircrafts;
 BEGIN 
     --SET LOCAL ROLE sfda_privileged_role;
     -- Creating tables with solution and answer
@@ -114,7 +139,12 @@ BEGIN
     QueryEqualityTest = 'SELECT COUNT(*) FROM Solution s WHERE EXISTS (SELECT * FROM Answer a WHERE ' || EqualityCondition || ')';
     EXECUTE QueryEqualityTest INTO NumberCorrectlyRows;
     EXECUTE 'SELECT COUNT(*) FROM solution;' INTO NumberExpectedRows;
-   
+  
+    --DECLARE AnsCursor CURSOR FOR SELECT * FROM answer;
+    --DECLARE SolCursor CURSOR FOR SELECT * FROM solution;
+
+    EXECUTE 'SELECT equalitycheck()';
+
     -- Checking for correct answer
     IF NOT (NumberExpectedRows = NumberCorrectlyRows) THEN
         DROP TABLE solution;
