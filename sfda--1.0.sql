@@ -58,16 +58,30 @@ RETURNS void AS $$
 DECLARE 
     AnsCursor CURSOR FOR SELECT * FROM answer;
     SolCursor CURSOR FOR SELECT * FROM solution;
-    val RECORD;
+    AnsCursorVal RECORD;
+    SolCursorVal RECORD;
+    correct BOOLEAN;
+    conditions text;
 BEGIN
     OPEN AnsCursor;
     OPEN SolCursor;
-    FETCH NEXT FROM AnsCursor INTO val;
-    RAISE NOTICE 'val % val %', val.range, val.model; 
+
+    -- Ceating string with equality conditions
+    SELECT string_agg('AnsCursorVal.' || column_name || ' = ' || 'SolCursorVal.' || column_name, ' AND ' ) INTO conditions 
+    FROM information_schema.columns
+    WHERE table_name = 'solution'
+    AND column_default IS NULL;
 
     WHILE FOUND LOOP
-        RAISE NOTICE 'val % val %', val.range, val.model; 
-        FETCH NEXT FROM AnsCursor INTO val;
+        FETCH NEXT FROM AnsCursor INTO AnsCursorVal;
+        FETCH NEXT FROM SolCursor INTO SolCursorVal;
+        IF () THEN
+            RAISE NOTICE 'val % val %', AnsCursorVal.range, AnsCursorVal.model; 
+        END IF;            
+--        EXECUTE 'SELECT ' || conditions INTO correct;
+--        EXECUTE 'SELECT' || CASE WHEN ' || equality || ' THEN 1 ELSE 0 END INTO correct;
+--        EXECUTE 'SELECT CASE WHEN ' || equality || ' THEN correct := 1 ELSE correct := 0 END' INTO correct;
+
     END LOOP;
 
 
@@ -83,7 +97,7 @@ RETURNS void AS $$
 $$ LANGUAGE SQL;
 
 CREATE FUNCTION SendAnswer(NameTask text, QueryAnswer text)
-RETURNS text  
+RETURNS text
 SECURITY DEFINER
 AS $$
 DECLARE
@@ -91,10 +105,11 @@ DECLARE
     QueryViweAnswer text;
     QuerySolution text;
     EqualityCondition text;
+    orderby text;
     QueryEqualityTest text;
-    ResultEqualityTest int; 
+    ResultEqualityTest int;
     NumberCorrectlyRows int;
-    numberExpectedRows int; 
+    numberExpectedRows int;
     SolColumns TEXT;
     AnsColumns TEXT;
     StartTime timestamp;
@@ -107,8 +122,8 @@ BEGIN
     --SET LOCAL ROLE sfda_privileged_role;
     -- Creating tables with solution and answer
 
-    EXECUTE 'SELECT solution FROM tasks WHERE name = $1' USING NameTask INTO QuerySolution; 
-    EXECUTE 'SELECT execute_time FROM tasks WHERE name = $1' USING NameTask INTO MaxExeTime; 
+    EXECUTE 'SELECT solution FROM tasks WHERE name = $1 ' USING NameTask INTO QuerySolution; 
+    EXECUTE 'SELECT execute_time FROM tasks WHERE name = $1 ' USING NameTask INTO MaxExeTime; 
     EXECUTE 'CREATE TABLE solution AS ' || QuerySolution;
     EXECUTE 'CREATE TABLE answer AS ' || QueryAnswer;
  
@@ -129,11 +144,34 @@ BEGIN
         RETURN 'Response contains different columns or a different column order';
     END IF;
 
+
+
+    -- Creating string with order by
+    SELECT string_agg(column_name, ', ' ) INTO orderby
+    FROM information_schema.columns
+    WHERE table_name = 'solution'
+    AND column_default IS NULL;
+
+    DROP TABLE solution;
+    DROP TABLE answer;
+    
+    EXECUTE 'CREATE TABLE solution AS ' || QuerySolution || ' ORDER BY ' || orderby;
+    EXECUTE 'CREATE TABLE answer AS ' || QueryAnswer || ' ORDER BY ' || orderby;
+    
+    
     -- Creating string with equality conditions
     SELECT string_agg('a.' || column_name || ' = ' || 's.' || column_name, ' AND ' ) INTO EqualityCondition
     FROM information_schema.columns
     WHERE table_name = 'solution'
     AND column_default IS NULL;
+    
+    -- Creating string with order by
+    SELECT string_agg(column_name, ', ' ) INTO orderby
+    FROM information_schema.columns
+    WHERE table_name = 'solution'
+    AND column_default IS NULL;
+
+    RAISE NOTICE 'aaaaaaaa %', orderby;
 
     -- Getting correct and expected rows
     QueryEqualityTest = 'SELECT COUNT(*) FROM Solution s WHERE EXISTS (SELECT * FROM Answer a WHERE ' || EqualityCondition || ')';
