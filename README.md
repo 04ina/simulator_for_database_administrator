@@ -1,6 +1,7 @@
 # simulator for database administrator
- installation
+## Installation
 > git clone  
 > cd simulator_for_database_administrator  
 > make install  
+## Setup
 
