@@ -1,5 +1,5 @@
 # simulator for database administrator
-installation
+> installation
 `git clone`
 `cd simulator_for_database_administrator`
 make install
